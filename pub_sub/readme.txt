@@ -22,3 +22,6 @@ the other for the server:  {server, londondl.p2p.bluefintrading.com}
 
 This is sufficient and necessary for connecting.
 
+
+
+The API connects with this.
