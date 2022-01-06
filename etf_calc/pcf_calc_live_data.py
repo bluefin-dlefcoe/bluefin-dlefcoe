@@ -10,6 +10,8 @@ import time
 import datetime as dt
 import pandas as pd
 import numpy as np
+import threading
+
 
 # import internal modules
 import pcf_support
@@ -34,11 +36,23 @@ def main():
     # run ishares
     t0 = time.time()
     r = pcf_ishares(current_date_yyyymmdd, prev_date_ddmmyy, ticker, calc_type='static')
-    subscribe_to_bonds.main(r['isin_list'])
-    
     print('nav result:', r)
     t1 = time.time()
     print('time taken:', round(t1-t0, 2), 'seconds')
+
+    # invoke live data
+    # subscribe_to_bonds.subscribe_to_list(r['isin_list'])
+    print('subscribing to live: wait 10 seconds')
+    thr = threading.Thread(target=subscribe_to_bonds.subscribe_to_list, args=([r['isin_list']]) )
+    thr.start()
+    time.sleep(10)
+
+    # run process every 10 seconds
+    for i in range(100):
+        threading.Timer(interval= 10 *(i+1), function=pcf_ishares,args= [current_date_yyyymmdd, prev_date_ddmmyy, ticker],kwargs={'calc_type':'live'}).start()
+
+        # r_live = pcf_ishares(current_date_yyyymmdd, prev_date_ddmmyy, ticker, calc_type='live')
+        # print('live nav:', r_live['nav_per_share'])
 
 
 def pcf_ishares(current_date_yyyymmdd, prev_date_ddmmyy, ticker, calc_type='static'):
@@ -111,8 +125,24 @@ def pcf_ishares(current_date_yyyymmdd, prev_date_ddmmyy, ticker, calc_type='stat
         print('computing static value')
     elif calc_type=='live':
         # subscribe to live data
-        # df['clean price'] = 100
         print('using live data')
+        # df['clean price'] = subscribe_to_bonds.bond_values.values()
+        
+        # turn dict into dataframe
+        df_live_prices = pd.DataFrame().from_dict(subscribe_to_bonds.bond_values, orient='index')
+        df_live_prices.reset_index(level=0, inplace=True)
+        df_live_prices.columns = ['isin','clean price']
+        df_live_prices[['isin','the type']] = pd.DataFrame(df_live_prices['isin'].tolist(), index=df_live_prices.index)
+
+        df_live_prices['clean price'].replace('', 100, inplace=True)
+        df_live_prices['clean price']=df_live_prices['clean price'].astype(float)
+        
+        # replace clean 
+        df = df.merge(df_live_prices,  on='isin', how='left')
+        df['clean price'] = df['clean price_y']
+        df.drop(['clean price_x'], axis=1, inplace=True)
+        df.drop(['clean price_y'], axis=1, inplace=True)
+        print(df.describe())
 
 
     # sum products to work out asset values 
@@ -155,7 +185,12 @@ def pcf_ishares(current_date_yyyymmdd, prev_date_ddmmyy, ticker, calc_type='stat
         'nav_error_bps':nav_error_bps,
         'isin_list': df['isin']
         }
+    file_output = 'Y:\DL_trade\code\python\pcf calculator\pcf_output.txt'
 
+    with open(file_output, "a") as f:
+        f.write(f'nav per share {nav_returns}  \n')
+
+    print(nav_returns['nav_per_share'])
 
     return nav_returns
 
